@@ -59,7 +59,7 @@ void setup() {
     TCNT1  = 0;
 
 
-    OCR1A = 62499;
+    OCR1A = 31249;
 
     TIMSK1 |= (1 << OCIE1A);
 
