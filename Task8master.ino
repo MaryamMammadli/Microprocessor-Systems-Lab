@@ -1,6 +1,10 @@
-//master code
-#define F_CPU 16000000UL // CPU frequency for calculations
-#define SLAVE_ADDR 0x08 // we only have 1 slave, therefore we only need 1 slave address. I chose 0x08 for conciseness
+// master code
+
+// CPU frequency for delay calculations
+#define F_CPU 16000000UL
+
+// I2C address of slave device
+#define SLAVE_ADDR 0x08
 
 /* PROTOCOL VALUES:
     0x00 - do nothing
@@ -11,69 +15,138 @@
 #include <util/delay.h>
 #include <stdbool.h>
 
+// Function to send START condition
 void TWI_start() {
-    TWCR = (1 << TWINT) | (1 << TWSTA) | (1 << TWEN); // send START
-    while (!(TWCR & (1 << TWINT))); // wait for confirmation that START was sent
-}
 
-void TWI_stop() {
-    TWCR = (1 << TWINT) | (1 << TWSTO) | (1 << TWEN); // send STOP
-}
+    // Send START signal and enable TWI
+    TWCR = (1 << TWINT) | (1 << TWSTA) | (1 << TWEN);
 
-void TWI_write(uint8_t data) {
-    TWDR = data; // set TWDR to the data that is to be sent over the bus
-    TWCR = (1 << TWINT) | (1 << TWEN);
+    // Wait until START is sent
     while (!(TWCR & (1 << TWINT)));
 }
 
-uint8_t TWI_read_nack() {
+// Function to send STOP condition
+void TWI_stop() {
+
+    // Send STOP signal
+    TWCR = (1 << TWINT) | (1 << TWSTO) | (1 << TWEN);
+}
+
+// Function to write one byte
+void TWI_write(uint8_t data) {
+
+    // Put data into data register
+    TWDR = data;
+
+    // Start transmission
     TWCR = (1 << TWINT) | (1 << TWEN);
-    while (!(TWCR & (1 << TWINT))); // wait for confirmation
-    return TWDR; // return received data
+
+    // Wait until transmission finishes
+    while (!(TWCR & (1 << TWINT)));
 }
 
+// Function to read one byte without ACK
+uint8_t TWI_read_nack() {
+
+    // Enable TWI for receiving data
+    TWCR = (1 << TWINT) | (1 << TWEN);
+
+    // Wait until data is received
+    while (!(TWCR & (1 << TWINT)));
+
+    // Return received data
+    return TWDR;
+}
+
+// Function to send data to slave
 void send_to_slave(uint8_t data) {
+
+    // Send START
     TWI_start();
-    TWI_write((SLAVE_ADDR << 1) | 0); // select address of the slave that we are sending to
-    TWI_write(data); // send the data
+
+    // Send slave address with write bit
+    TWI_write((SLAVE_ADDR << 1) | 0);
+
+    // Send data
+    TWI_write(data);
+
+    // Send STOP
     TWI_stop();
 }
 
+// Function to request data from slave
 uint8_t request_from_slave() {
+
     uint8_t data;
+
+    // Send START
     TWI_start();
-    TWI_write((SLAVE_ADDR << 1) | 1); // select slave to be read from
-    data = TWI_read_nack(); // read data from the slave
+
+    // Send slave address with read bit
+    TWI_write((SLAVE_ADDR << 1) | 1);
+
+    // Read data from slave
+    data = TWI_read_nack();
+
+    // Send STOP
     TWI_stop();
+
+    // Return received data
     return data;
 }
 
 void setup() {
-    TWSR = 0x00; // prescaler 1
-    TWBR = 72; // with prescaler 1, SCL frequency is 100kHz
-    TWCR = (1 << TWEN); // enable I2C
 
-    PORTC |= (1 << PC4) | (1 << PC5); // enable pull-ups on SDA and SCL
+    // Set prescaler to 1
+    TWSR = 0x00;
 
-    DDRB |= (1 << PB5); // use onboard LED
-    DDRD &= ~(1 << PD2); // button (PD0 and PD1 are reseved for RX and TX)
+    // Set SCL frequency to 100kHz
+    TWBR = 72;
+
+    // Enable I2C (TWI)
+    TWCR = (1 << TWEN);
+
+    // Enable pull-up resistors on SDA and SCL
+    PORTC |= (1 << PC4) | (1 << PC5);
+
+    // Set onboard LED pin as output
+    DDRB |= (1 << PB5);
+
+    // Set button pin as input
+    DDRD &= ~(1 << PD2);
+
+    // Enable pull-up resistor for button
     PORTD |= (1 << PD2);
 }
 
 void loop() {
+
+    // Check if button is pressed
     if (!(PIND & (1 << PD2))) {
-        send_to_slave(0x01); //slave led
+
+        // Send value 0x01 to slave
+        send_to_slave(0x01);
+
     } else {
+
+        // Send value 0x00 to slave
         send_to_slave(0x00);
     }
 
-    uint8_t received = request_from_slave(); // listen to the slave
+    // Request data from slave
+    uint8_t received = request_from_slave();
 
-    if (received == 0x02) { // if received value from the slave is 2, then light up LED
+    // If slave sends 0x02, turn on LED
+    if (received == 0x02) {
+
         PORTB |= (1 << PB5);
+
     } else {
+
+        // Otherwise turn off LED
         PORTB &= ~(1 << PB5);
     }
 
+    // Small delay
     _delay_ms(10);
 }
